@@ -3,7 +3,7 @@ FastAPI Backend for Market Merchant App
 Main application entry point with all routes and middleware
 """
 
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import FastAPI, HTTPException, Depends, status, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import List, Dict, Optional, Any
@@ -50,6 +50,7 @@ class MemoryStore:
         self.orders = {}
         self.offers = {}
         self.sessions = {}
+        self.reviews = {}
         self._init_mock_data()
     
     def _init_mock_data(self):
@@ -250,6 +251,17 @@ class OfferCreate(BaseModel):
     valid_till: str
     conditions: Dict[str, Any] = {}
     applicable_categories: List[str] = []
+    product_ids: List[str] = []
+
+class ReviewCreate(BaseModel):
+    customer_id: str
+    order_id: str
+    rating: int
+    title: Optional[str] = None
+    comment: Optional[str] = None
+    images: List[str] = []
+    shop_id: Optional[str] = None
+    product_id: Optional[str] = None
 
 # Authentication helper
 def get_current_merchant(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
@@ -414,7 +426,8 @@ async def create_product(product_data: ProductCreate, merchant_id: str = Depends
         "merchant_id": merchant_id,
         **product_data.dict(),
         "is_active": True,
-        "created_at": datetime.now().isoformat()
+        "created_at": datetime.now().isoformat(),
+        "offers": []
     }
     
     memory_store.products[product_id] = new_product
@@ -491,9 +504,8 @@ async def get_offers(merchant_id: str = Depends(get_current_merchant)):
 
 @app.post("/offers")
 async def create_offer(offer_data: OfferCreate, merchant_id: str = Depends(get_current_merchant)):
-    """Create a new offer"""
+    """Create a new offer (supports product-level offers)"""
     offer_id = f"off_{uuid.uuid4().hex[:8]}"
-    
     new_offer = {
         "offer_id": offer_id,
         "merchant_id": merchant_id,
@@ -502,8 +514,11 @@ async def create_offer(offer_data: OfferCreate, merchant_id: str = Depends(get_c
         "usage_count": 0,
         "created_at": datetime.now().isoformat()
     }
-    
     memory_store.offers[offer_id] = new_offer
+    # Attach offer to products if product_ids specified
+    for pid in offer_data.product_ids:
+        if pid in memory_store.products:
+            memory_store.products[pid].setdefault("offers", []).append(offer_id)
     return new_offer
 
 @app.put("/offers/{offer_id}")
@@ -533,6 +548,53 @@ async def delete_offer(offer_id: str, merchant_id: str = Depends(get_current_mer
     
     del memory_store.offers[offer_id]
     return {"message": "Offer deleted successfully"}
+
+# In-memory reviews store
+if not hasattr(memory_store, "reviews"):
+    memory_store.reviews = {}
+
+def get_current_customer(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
+    token = credentials.credentials
+    # For demo, accept any token and return customer123
+    if token and token.startswith(("mock", "demo")):
+        return "customer123"
+    # Real implementation: decode JWT and extract customer_id
+    for session_id, session_data in memory_store.sessions.items():
+        if session_data.get("token") == token:
+            return session_data.get("customer_id", "customer123")
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication credentials")
+
+@app.post("/reviews")
+async def add_review(review: ReviewCreate = Body(...), customer_id: str = Depends(get_current_customer)):
+    """Add a review for a product or shop (customer only)"""
+    review_id = f"rev_{uuid.uuid4().hex[:8]}"
+    review_dict = review.dict()
+    review_dict["review_id"] = review_id
+    review_dict["customer_id"] = customer_id
+    review_dict["created_at"] = datetime.now().isoformat()
+    review_dict["is_verified"] = True
+    review_dict["is_approved"] = True
+    memory_store.reviews[review_id] = review_dict
+    # Update product/shop review stats
+    if review.product_id and review.product_id in memory_store.products:
+        p = memory_store.products[review.product_id]
+        p["total_reviews"] = p.get("total_reviews", 0) + 1
+        p["rating"] = round(((p.get("rating", 0) * (p["total_reviews"] - 1)) + review.rating) / p["total_reviews"], 2)
+    if review.shop_id and review.shop_id in memory_store.merchants:
+        s = memory_store.merchants[review.shop_id]
+        s["total_reviews"] = s.get("total_reviews", 0) + 1
+        s["rating"] = round(((s.get("rating", 0) * (s["total_reviews"] - 1)) + review.rating) / s["total_reviews"], 2)
+    return review_dict
+
+@app.get("/reviews")
+async def get_reviews(product_id: Optional[str] = None, shop_id: Optional[str] = None):
+    """List reviews for a product or shop"""
+    reviews = list(memory_store.reviews.values())
+    if product_id:
+        reviews = [r for r in reviews if r.get("product_id") == product_id]
+    if shop_id:
+        reviews = [r for r in reviews if r.get("shop_id") == shop_id]
+    return reviews
 
 # Run the application
 if __name__ == "__main__":
