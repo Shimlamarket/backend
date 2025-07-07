@@ -38,11 +38,11 @@ class DynamoDBService:
         
         # Table names
         self.users_table = self.dynamodb.Table('BaseUser')
-        self.shops_table = self.dynamodb.Table('shops')
+        self.shops_table = self.dynamodb.Table('Shop')
         self.products_table = self.dynamodb.Table('Product')
         self.orders_table = self.dynamodb.Table('Order')
-        self.reviews_table = self.dynamodb.Table('reviews')
-        self.addresses_table = self.dynamodb.Table('addresses')
+        self.reviews_table = self.dynamodb.Table('Review')
+        self.addresses_table = self.dynamodb.Table('Address')
     
     def _serialize_datetime(self, obj):
         """Convert datetime objects to ISO string for DynamoDB"""
