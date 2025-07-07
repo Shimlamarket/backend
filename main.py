@@ -1,250 +1,238 @@
-# main.py - Enhanced FastAPI with Better CORS & Debugging
+"""
+FastAPI Backend for Market Merchant App
+Main application entry point with all routes and middleware
+"""
 
-from fastapi import FastAPI, HTTPException, Depends, status, Request
+from fastapi import FastAPI, HTTPException, Depends, status, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi.responses import JSONResponse
+from typing import List, Dict, Optional, Any
+from datetime import datetime, timedelta
 from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
-from datetime import datetime
-import uvicorn
+import json
+import uuid
 import logging
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Market App API", version="1.0.0")
 
-# Enhanced CORS Configuration
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:5173",
-        "http://localhost:8080",
-        "http://127.0.0.1:8080"
-    ],
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
-    expose_headers=["*"]
+# Initialize FastAPI app
+app = FastAPI(
+    title="Market Merchant API",
+    description="Backend API for Market Merchant Dashboard",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc"
 )
 
-# Add custom middleware for debugging
+# CORS middleware for React frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins for development; restrict in production
+    allow_credentials=True,
+    allow_methods=["*"],  # Ensure all HTTP methods, including OPTIONS, are allowed
+    allow_headers=["Authorization", "Content-Type", "*"],  # Explicitly allow Authorization and Content-Type headers
+)
+
+# Add a global exception handler for OPTIONS requests
+@app.options("/{path:path}")
+async def handle_options(path: str):
+    """Handle OPTIONS requests for CORS preflight"""
+    return {"message": "CORS preflight handled"}
+
+# Add logging for requests and responses
 @app.middleware("http")
-async def log_requests(request: Request, call_next):
-    start_time = datetime.now()
-    logger.info(f"🔥 INCOMING REQUEST: {request.method} {request.url}")
-    logger.info(f"🔥 Headers: {dict(request.headers)}")
-    
+async def log_requests(request, call_next):
+    logger.info(f"Incoming request: {request.method} {request.url}")
+    if request.method in ["POST", "PUT"]:
+        body = await request.body()
+        logger.info(f"Request body: {body.decode('utf-8')}")
     response = await call_next(request)
-    
-    process_time = (datetime.now() - start_time).total_seconds()
-    logger.info(f"✅ RESPONSE: {response.status_code} - Processed in {process_time:.3f}s")
-    
+    logger.info(f"Response status: {response.status_code}")
     return response
 
 # Security
 security = HTTPBearer()
 
-# Enhanced Mock Database with more realistic data
-MERCHANTS_DB = {
-    "merchant123": {
-        "merchant_id": "merchant123",
-        "business_name": "Fresh Market Store",
-        "business_type": "grocery",
-        "email": "merchant@freshmarket.com",
-        "phone": "+91-9876543210",
-        "address": "Shop 15, Main Market, Sector 17, Chandigarh",
-        "latitude": 30.7333,
-        "longitude": 76.7794,
-        "subscription_plan": "premium",
-        "shop_status": {
-            "is_open": True,
-            "accepting_orders": True,
-            "reason": None
-        },
-        "created_at": "2024-01-01T00:00:00Z"
-    }
-}
-
-ITEMS_DB = {
-    "merchant123": [
-        {
-            "item_id": "item_001",
-            "name": "Fresh Red Apples",
-            "category": "fruits",
-            "subcategory": "seasonal",
-            "brand": "Local Farm",
-            "description": "Fresh red apples, perfect for snacking",
-            "price": 120,
-            "mrp": 150,
-            "stock_quantity": 50,
-            "status": "active",
-            "weight": 1.0,
-            "sku": "AP001",
-            "images": ["https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?w=300&h=200&fit=crop"],
-            "created_at": "2024-01-15T10:00:00Z"
-        },
-        {
-            "item_id": "item_002",
-            "name": "Organic Milk",
-            "category": "dairy",
-            "subcategory": "organic",
-            "brand": "Pure Dairy",
-            "description": "Fresh organic milk from grass-fed cows",
-            "price": 60,
-            "mrp": 70,
-            "stock_quantity": 30,
-            "status": "active",
-            "weight": 1.0,
-            "sku": "MK001",
-            "images": ["https://images.unsplash.com/photo-1550583724-b2692b85b150?w=300&h=200&fit=crop"],
-            "created_at": "2024-01-15T10:00:00Z"
-        },
-        {
-            "item_id": "item_003",
-            "name": "Fresh Bread",
-            "category": "bakery",
-            "subcategory": "daily",
-            "brand": "Baker's Choice",
-            "description": "Freshly baked whole wheat bread",
-            "price": 45,
-            "mrp": 50,
-            "stock_quantity": 15,
-            "status": "active",
-            "weight": 0.5,
-            "sku": "BR001",
-            "images": ["https://images.unsplash.com/photo-1549931319-a545dcf3bc73?w=300&h=200&fit=crop"],
-            "created_at": "2024-01-15T10:00:00Z"
-        },
-        {
-            "item_id": "item_004",
-            "name": "Bananas",
-            "category": "fruits",
-            "subcategory": "tropical",
-            "brand": "Local Farm",
-            "description": "Fresh ripe bananas",
-            "price": 40,
-            "mrp": 50,
-            "stock_quantity": 8,  # Low stock
-            "status": "active",
-            "weight": 1.0,
-            "sku": "BN001",
-            "images": ["https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?w=300&h=200&fit=crop"],
-            "created_at": "2024-01-15T10:00:00Z"
-        },
-        {
-            "item_id": "item_005",
-            "name": "Tomatoes",
-            "category": "vegetables",
-            "subcategory": "seasonal",
-            "brand": "Local Farm",
-            "description": "Fresh red tomatoes",
-            "price": 80,
-            "mrp": 90,
-            "stock_quantity": 5,  # Low stock
-            "status": "active",
-            "weight": 1.0,
-            "sku": "TM001",
-            "images": ["https://images.unsplash.com/photo-1546094096-0df4bcaaa337?w=300&h=200&fit=crop"],
+# In-memory data store
+class MemoryStore:
+    def __init__(self):
+        self.merchants = {}
+        self.products = {}
+        self.orders = {}
+        self.offers = {}
+        self.sessions = {}
+        self.reviews = {}
+        self._init_mock_data()
+    
+    def _init_mock_data(self):
+        """Initialize with mock data matching React app expectations"""
+        # Mock merchant
+        self.merchants["merchant123"] = {
+            "merchant_id": "merchant123",
+            "business_name": "Fresh Market Store",
+            "business_type": "grocery",
+            "email": "merchant@freshmarket.com",
+            "phone": "+91-9876543210",
+            "address": "Shop 15, Main Market, Sector 17, Chandigarh",
+            "latitude": 30.7333,
+            "longitude": 76.7794,
+            "subscription_plan": "premium",
+            "shop_status": {
+                "is_open": True,
+                "accepting_orders": True,
+                "reason": None
+            },
             "created_at": "2024-01-15T10:00:00Z"
         }
-    ]
-}
+        
+        # Mock products
+        self.products.update({
+            "prod1": {
+                "product_id": "prod1",
+                "merchant_id": "merchant123",
+                "name": "Fresh Red Apples",
+                "category": "fruits",
+                "subcategory": "seasonal",
+                "brand": "Local Farm",
+                "description": "Fresh red apples, perfect for snacking. Crisp and sweet variety.",
+                "variants": [
+                    {"id": "var1", "name": "1kg", "mrp": 150, "selling_price": 120, "stock_quantity": 50, "sku": "AP001"},
+                    {"id": "var2", "name": "2kg", "mrp": 280, "selling_price": 220, "stock_quantity": 25, "sku": "AP002"}
+                ],
+                "images": ["https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?w=300&h=200&fit=crop"],
+                "is_active": True,
+                "weight": 1.0,
+                "created_at": "2024-01-15T10:00:00Z"
+            },
+            "prod2": {
+                "product_id": "prod2",
+                "merchant_id": "merchant123",
+                "name": "Organic Whole Milk",
+                "category": "dairy",
+                "subcategory": "organic",
+                "brand": "Pure Dairy",
+                "description": "Fresh organic milk from grass-fed cows. Rich in nutrients and taste.",
+                "variants": [
+                    {"id": "var3", "name": "1L", "mrp": 70, "selling_price": 60, "stock_quantity": 5, "sku": "MK001"},
+                    {"id": "var4", "name": "500ml", "mrp": 40, "selling_price": 35, "stock_quantity": 15, "sku": "MK002"}
+                ],
+                "images": ["https://images.unsplash.com/photo-1563636619-e9143da7973b?w=300&h=200&fit=crop"],
+                "is_active": True,
+                "weight": 1.0,
+                "created_at": "2024-01-15T11:00:00Z"
+            },
+            "prod3": {
+                "product_id": "prod3",
+                "merchant_id": "merchant123",
+                "name": "Fresh White Bread",
+                "category": "bakery",
+                "subcategory": "daily",
+                "brand": "Daily Bread",
+                "description": "Freshly baked bread, made daily with premium flour.",
+                "variants": [
+                    {"id": "var5", "name": "500g", "mrp": 40, "selling_price": 35, "stock_quantity": 80, "sku": "BR001"}
+                ],
+                "images": ["https://images.unsplash.com/photo-1509440159596-0249088772ff?w=300&h=200&fit=crop"],
+                "is_active": True,
+                "weight": 0.5,
+                "created_at": "2024-01-15T12:00:00Z"
+            }
+        })
+        
+        # Mock orders
+        self.orders.update({
+            "ORD001": {
+                "order_id": "ORD001",
+                "merchant_id": "merchant123",
+                "customer_name": "John Doe",
+                "customer_phone": "+91-9876543210",
+                "items": [
+                    {"product_name": "Fresh Apples", "variant": "1kg", "quantity": 2, "unit_price": 120, "total_price": 240},
+                    {"product_name": "Organic Milk", "variant": "1L", "quantity": 1, "unit_price": 60, "total_price": 60}
+                ],
+                "total_amount": 300.0,
+                "status": "pending",
+                "delivery_type": "delivery",
+                "delivery_address": "123 Main St, Sector 17, Chandigarh",
+                "created_at": "2024-01-15T10:30:00Z",
+                "customer_notes": "Please deliver fresh items"
+            },
+            "ORD002": {
+                "order_id": "ORD002",
+                "merchant_id": "merchant123",
+                "customer_name": "Jane Smith",
+                "customer_phone": "+91-9876543211",
+                "items": [
+                    {"product_name": "Fresh Bread", "variant": "500g", "quantity": 2, "unit_price": 35, "total_price": 70},
+                    {"product_name": "Premium Basmati Rice", "variant": "1kg", "quantity": 1, "unit_price": 150, "total_price": 150}
+                ],
+                "total_amount": 220.0,
+                "status": "preparing",
+                "delivery_type": "pickup",
+                "created_at": "2024-01-15T11:15:00Z",
+                "customer_notes": ""
+            },
+            "ORD003": {
+                "order_id": "ORD003",
+                "merchant_id": "merchant123",
+                "customer_name": "Bob Johnson",
+                "customer_phone": "+91-9876543212",
+                "items": [
+                    {"product_name": "Fresh Bread", "variant": "500g", "quantity": 1, "unit_price": 35, "total_price": 35}
+                ],
+                "total_amount": 125.0,
+                "status": "ready",
+                "delivery_type": "delivery",
+                "delivery_address": "456 Park St, Sector 22, Chandigarh",
+                "created_at": "2024-01-15T12:00:00Z",
+                "customer_notes": ""
+            }
+        })
+        
+        # Mock offers
+        self.offers.update({
+            "off1": {
+                "offer_id": "off1",
+                "merchant_id": "merchant123",
+                "name": "20% Off on Fruits",
+                "description": "Get 20% discount on all fruit items",
+                "type": "percentage",
+                "level": "category",
+                "discount_value": 20,
+                "valid_from": "2024-01-15T00:00:00Z",
+                "valid_till": "2024-01-31T23:59:59Z",
+                "is_active": True,
+                "usage_count": 15,
+                "conditions": {"min_order_value": 100, "max_discount": 50},
+                "applicable_categories": ["fruits"]
+            },
+            "off2": {
+                "offer_id": "off2",
+                "merchant_id": "merchant123",
+                "name": "Buy 2 Get 1 Free",
+                "description": "Buy 2 dairy products and get 1 free",
+                "type": "buy_x_get_y",
+                "level": "category",
+                "discount_value": 0,
+                "valid_from": "2024-01-15T00:00:00Z",
+                "valid_till": "2024-02-15T23:59:59Z",
+                "is_active": True,
+                "usage_count": 8,
+                "conditions": {"buy_quantity": 2, "get_quantity": 1},
+                "applicable_categories": ["dairy"]
+            }
+        })
 
-ORDERS_DB = {
-    "merchant123": [
-        {
-            "order_id": "ORD-001",
-            "customer_name": "Rajesh Kumar",
-            "customer_phone": "+91 9876543210",
-            "customer_address": "123 MG Road, Sector 14, Gurgaon, Haryana - 122001",
-            "items": [
-                {"product_id": "item_001", "product_name": "Fresh Red Apples", "quantity": 2, "price": 120},
-                {"product_id": "item_002", "product_name": "Organic Milk", "quantity": 1, "price": 60}
-            ],
-            "total_amount": 300.0,
-            "status": "pending",
-            "order_time": "2024-01-20T14:30:00Z",
-            "estimated_delivery": "2024-01-20T16:30:00Z"
-        },
-        {
-            "order_id": "ORD-002",
-            "customer_name": "Priya Sharma",
-            "customer_phone": "+91 9876543211",
-            "customer_address": "456 Cyber City, Gurgaon, Haryana - 122002",
-            "items": [
-                {"product_id": "item_003", "product_name": "Fresh Bread", "quantity": 2, "price": 45}
-            ],
-            "total_amount": 90.0,
-            "status": "accepted",
-            "order_time": "2024-01-20T15:00:00Z",
-            "estimated_delivery": "2024-01-20T17:00:00Z"
-        },
-        {
-            "order_id": "ORD-003",
-            "customer_name": "Amit Singh",
-            "customer_phone": "+91 9876543212",
-            "customer_address": "789 Golf Course Road, Gurgaon, Haryana - 122003",
-            "items": [
-                {"product_id": "item_004", "product_name": "Bananas", "quantity": 3, "price": 40},
-                {"product_id": "item_005", "product_name": "Tomatoes", "quantity": 1, "price": 80}
-            ],
-            "total_amount": 200.0,
-            "status": "pending",
-            "order_time": "2024-01-20T16:15:00Z",
-            "estimated_delivery": "2024-01-20T18:15:00Z"
-        }
-    ]
-}
+# Global memory store instance
+memory_store = MemoryStore()
 
-OFFERS_DB = {
-    "merchant123": [
-        {
-            "offer_id": "offer_001",
-            "title": "Fresh Fruits 20% Off",
-            "description": "Get 20% off on all fresh fruits",
-            "discount_type": "percentage",
-            "discount_value": 20,
-            "min_order_value": 200,
-            "max_discount": 100,
-            "start_date": "2024-01-15T00:00:00Z",
-            "end_date": "2024-01-30T23:59:59Z",
-            "status": "active",
-            "applicable_categories": ["fruits"]
-        },
-        {
-            "offer_id": "offer_002",
-            "title": "Buy 2 Get 1 Free - Dairy",
-            "description": "Buy 2 dairy products and get 1 free",
-            "discount_type": "bogo",
-            "discount_value": 1,
-            "min_order_value": 100,
-            "start_date": "2024-01-10T00:00:00Z",
-            "end_date": "2024-01-25T23:59:59Z",
-            "status": "active",
-            "applicable_categories": ["dairy"]
-        },
-        {
-            "offer_id": "offer_003",
-            "title": "Free Delivery",
-            "description": "Free delivery on orders above ₹500",
-            "discount_type": "fixed",
-            "discount_value": 50,
-            "min_order_value": 500,
-            "start_date": "2024-01-01T00:00:00Z",
-            "end_date": "2024-12-31T23:59:59Z",
-            "status": "active",
-            "applicable_categories": []
-        }
-    ]
-}
-
-# Pydantic Models
+# Pydantic models
 class GoogleAuthRequest(BaseModel):
     access_token: str
 
@@ -252,448 +240,384 @@ class AuthResponse(BaseModel):
     token: str
     merchant: Dict[str, Any]
 
-class ItemCreate(BaseModel):
-    name: str
-    category: str
-    description: str
-    price: float
-    mrp: float
-    stock_quantity: int
-    weight: Optional[float] = 1.0
-    brand: Optional[str] = ""
-    subcategory: Optional[str] = ""
-
-class ItemUpdate(BaseModel):
-    name: Optional[str] = None
-    category: Optional[str] = None
-    description: Optional[str] = None
-    price: Optional[float] = None
-    mrp: Optional[float] = None
-    stock_quantity: Optional[int] = None
-    weight: Optional[float] = None
-    status: Optional[str] = None
+class ShopStatusUpdate(BaseModel):
+    is_open: bool
+    accepting_orders: bool
+    reason: Optional[str] = None
 
 class OrderStatusUpdate(BaseModel):
     status: str
-    estimated_delivery: Optional[str] = None
+
+class ProductCreate(BaseModel):
+    name: str
+    category: str
+    subcategory: Optional[str] = None
+    brand: Optional[str] = None
+    description: Optional[str] = None
+    variants: List[Dict[str, Any]]
+    images: List[str] = []
+    weight: Optional[float] = None
 
 class OfferCreate(BaseModel):
-    title: str
+    name: str
     description: str
-    discount_type: str
+    type: str  # percentage, fixed_amount, buy_x_get_y
+    level: str  # product, category, merchant
     discount_value: float
-    min_order_value: float
-    max_discount: Optional[float] = None
+    valid_from: str
+    valid_till: str
+    conditions: Dict[str, Any] = {}
     applicable_categories: List[str] = []
+    product_ids: List[str] = []
 
-# Helper Functions
-async def get_current_merchant(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Extract merchant info from JWT token"""
+class ReviewCreate(BaseModel):
+    customer_id: str
+    order_id: str
+    rating: int
+    title: Optional[str] = None
+    comment: Optional[str] = None
+    images: List[str] = []
+    shop_id: Optional[str] = None
+    product_id: Optional[str] = None
+
+# Authentication helper
+def get_current_merchant(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
+    """Extract merchant ID from JWT token (simplified for demo)"""
+    token = credentials.credentials
+    
+    # For demo, accept any token and return merchant123
+    if token and token.startswith(('mock', 'demo')):
+        return "merchant123"
+    
     # In real implementation, decode JWT and extract merchant_id
-    # For now, return mock merchant
-    return "merchant123"
+    for session_id, session_data in memory_store.sessions.items():
+        if session_data.get("token") == token:
+            return session_data.get("merchant_id")
+    
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid authentication credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
-def calculate_dashboard_stats(merchant_id: str):
-    """Calculate real dashboard statistics with detailed logging"""
-    logger.info(f"🔥 Calculating dashboard stats for merchant: {merchant_id}")
-    
-    items = ITEMS_DB.get(merchant_id, [])
-    orders = ORDERS_DB.get(merchant_id, [])
-    offers = OFFERS_DB.get(merchant_id, [])
-    
-    logger.info(f"🔥 Found {len(items)} items, {len(orders)} orders, {len(offers)} offers")
-    
-    # Calculate today's stats (mock today as 2024-01-20 for demo)
-    today_orders = [o for o in orders if o["order_time"].startswith("2024-01-20")]
-    pending_orders = [o for o in orders if o["status"] == "pending"]
-    low_stock_items = [i for i in items if i["stock_quantity"] < 20]
-    active_offers = [o for o in offers if o["status"] == "active"]
-    
-    today_revenue = sum(o["total_amount"] for o in today_orders)
-    
-    stats = {
-        "orders_today": len(today_orders),
-        "revenue_today": today_revenue,
-        "active_offers": len(active_offers),
-        "low_stock_products": len(low_stock_items),
-        "total_products": len(items),
-        "pending_orders": len(pending_orders),
-        "top_products": [
-            {"name": "Fresh Red Apples", "sales": 25, "revenue": 3000},
-            {"name": "Organic Milk", "sales": 18, "revenue": 1080},
-            {"name": "Fresh Bread", "sales": 15, "revenue": 675}
-        ],
-        "recent_orders": orders[:5],  # Last 5 orders
-        "timestamp": datetime.now().isoformat(),
-        "merchant_id": merchant_id
-    }
-    
-    logger.info(f"🔥 Dashboard stats calculated: {stats}")
-    return stats
+# Routes
 
-# ============ HEALTH CHECK ============
 @app.get("/")
 async def root():
-    return {"message": "Market App API is running", "version": "1.0.0", "status": "healthy"}
+    """Health check endpoint"""
+    return {"message": "Market Merchant API is running", "timestamp": datetime.now()}
 
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
-
-# ============ AUTHENTICATION ROUTES ============
-@app.post("/api/auth/google", response_model=AuthResponse)
+@app.post("/auth/google", response_model=AuthResponse)
 async def google_auth(auth_request: GoogleAuthRequest):
-    """Google OAuth authentication"""
-    logger.info(f"🔥 Google auth request: {auth_request.access_token[:20]}...")
-    
-    # In real implementation, verify Google access token
-    # For now, return mock response
-    
-    mock_token = f"jwt_token_{auth_request.access_token[:10]}"
-    merchant = MERCHANTS_DB["merchant123"]
-    
-    response = AuthResponse(
-        token=mock_token,
-        merchant=merchant
-    )
-    
-    logger.info(f"🔥 Auth successful for merchant: {merchant['business_name']}")
-    return response
+    logger.info(f"Received auth request with token: {auth_request.access_token}")
 
-@app.post("/api/auth/logout")
-async def logout(merchant_id: str = Depends(get_current_merchant)):
-    """Logout merchant"""
-    logger.info(f"🔥 Logout request for merchant: {merchant_id}")
-    return {"message": "Successfully logged out"}
+    if not auth_request.access_token:
+        logger.warning("Access token missing in auth request")
+        raise HTTPException(status_code=400, detail="Access token required")
 
-# ============ DASHBOARD ROUTES ============
-@app.get("/api/merchants/{merchant_id}/dashboard")
-async def get_dashboard(merchant_id: str):
-    """Get merchant dashboard data - REAL IMPLEMENTATION with detailed logging"""
-    logger.info(f"🔥 Dashboard request for merchant: {merchant_id}")
-    
-    if merchant_id not in MERCHANTS_DB:
-        logger.error(f"❌ Merchant not found: {merchant_id}")
+    session_id = str(uuid.uuid4())
+    token = f"demo-token-{session_id}"
+    merchant_id = "merchant123"
+
+    memory_store.sessions[session_id] = {
+        "token": token,
+        "merchant_id": merchant_id,
+        "created_at": datetime.now().isoformat()
+    }
+
+    logger.info(f"Session created for merchant {merchant_id} with session_id {session_id}")
+
+    merchant = memory_store.merchants.get(merchant_id)
+    if not merchant:
+        logger.error(f"Merchant {merchant_id} not found during auth")
         raise HTTPException(status_code=404, detail="Merchant not found")
+
+    return AuthResponse(token=token, merchant=merchant)
+
+
+@app.get("/dashboard")
+async def get_dashboard(merchant_id: str = Depends(get_current_merchant)):
+    """Get dashboard analytics data"""
+    # Calculate dashboard metrics from orders
+    merchant_orders = [o for o in memory_store.orders.values() if o["merchant_id"] == merchant_id]
+    today = datetime.now().date()
     
-    try:
-        stats = calculate_dashboard_stats(merchant_id)
-        logger.info(f"✅ Dashboard response ready: {len(str(stats))} characters")
-        return JSONResponse(content=stats, status_code=200, headers={
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*"
+    # Today's orders
+    orders_today = len([o for o in merchant_orders if datetime.fromisoformat(o["created_at"].replace('Z', '+00:00')).date() == today])
+    
+    # Today's revenue
+    revenue_today = sum([o["total_amount"] for o in merchant_orders if datetime.fromisoformat(o["created_at"].replace('Z', '+00:00')).date() == today])
+    
+    # Active offers
+    merchant_offers = [o for o in memory_store.offers.values() if o["merchant_id"] == merchant_id and o["is_active"]]
+    active_offers = len(merchant_offers)
+    
+    # Low stock products
+    merchant_products = [p for p in memory_store.products.values() if p["merchant_id"] == merchant_id]
+    low_stock_products = len([p for p in merchant_products if any(v["stock_quantity"] < 10 for v in p["variants"])])
+    
+    # Top products (mock calculation)
+    top_products = [
+        {"name": "Fresh Apples", "sales": 45, "revenue": 2250},
+        {"name": "Organic Milk", "sales": 32, "revenue": 1920},
+        {"name": "Fresh Bread", "sales": 28, "revenue": 980}
+    ]
+    
+    # Recent orders
+    recent_orders = sorted(merchant_orders, key=lambda x: x["created_at"], reverse=True)[:5]
+    formatted_recent_orders = []
+    for order in recent_orders:
+        formatted_recent_orders.append({
+            "order_id": order["order_id"],
+            "customer": order["customer_name"],
+            "amount": order["total_amount"],
+            "status": order["status"],
+            "items": len(order["items"])
         })
-    except Exception as e:
-        logger.error(f"❌ Dashboard calculation failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Dashboard calculation failed: {str(e)}")
-
-# ============ MERCHANT PROFILE ROUTES ============
-@app.get("/api/merchants/{merchant_id}/profile")
-async def get_merchant_profile(merchant_id: str):
-    """Get merchant profile"""
-    logger.info(f"🔥 Profile request for merchant: {merchant_id}")
     
-    if merchant_id not in MERCHANTS_DB:
+    return {
+        "orders_today": orders_today,
+        "revenue_today": revenue_today,
+        "active_offers": active_offers,
+        "low_stock_products": low_stock_products,
+        "total_products": len(merchant_products),
+        "pending_orders": len([o for o in merchant_orders if o["status"] == "pending"]),
+        "top_products": top_products,
+        "recent_orders": formatted_recent_orders
+    }
+
+@app.get("/merchants/profile")
+async def get_merchant_profile(merchant_id: str = Depends(get_current_merchant)):
+    """Get merchant profile information"""
+    merchant = memory_store.merchants.get(merchant_id)
+    if not merchant:
         raise HTTPException(status_code=404, detail="Merchant not found")
-    
-    return JSONResponse(content=MERCHANTS_DB[merchant_id])
+    return merchant
 
-@app.put("/api/merchants/{merchant_id}/metadata")
-async def update_merchant_metadata(merchant_id: str, metadata: Dict[str, Any]):
-    """Update merchant metadata"""
-    logger.info(f"🔥 Update metadata for merchant: {merchant_id}")
-    
-    if merchant_id not in MERCHANTS_DB:
+@app.put("/merchants/profile")
+async def update_merchant_profile(profile_data: Dict[str, Any], merchant_id: str = Depends(get_current_merchant)):
+    """Update merchant profile information"""
+    if merchant_id not in memory_store.merchants:
         raise HTTPException(status_code=404, detail="Merchant not found")
     
     # Update merchant data
-    MERCHANTS_DB[merchant_id].update(metadata)
-    return JSONResponse(content=MERCHANTS_DB[merchant_id])
-
-@app.get("/api/merchants/{merchant_id}/shop-status")
-async def get_shop_status(merchant_id: str):
-    """Get shop status"""
-    logger.info(f"🔥 Shop status request for merchant: {merchant_id}")
+    memory_store.merchants[merchant_id].update(profile_data)
+    memory_store.merchants[merchant_id]["updated_at"] = datetime.now().isoformat()
     
-    if merchant_id not in MERCHANTS_DB:
+    return memory_store.merchants[merchant_id]
+
+@app.get("/merchants/shop-status")
+async def get_shop_status(merchant_id: str = Depends(get_current_merchant)):
+    """Get shop operational status"""
+    merchant = memory_store.merchants.get(merchant_id)
+    if not merchant:
+        raise HTTPException(status_code=404, detail="Merchant not found")
+    return merchant["shop_status"]
+
+@app.put("/merchants/shop-status")
+async def update_shop_status(status_data: ShopStatusUpdate, merchant_id: str = Depends(get_current_merchant)):
+    """Update shop operational status"""
+    if merchant_id not in memory_store.merchants:
         raise HTTPException(status_code=404, detail="Merchant not found")
     
-    return JSONResponse(content=MERCHANTS_DB[merchant_id]["shop_status"])
+    memory_store.merchants[merchant_id]["shop_status"] = status_data.dict()
+    return memory_store.merchants[merchant_id]["shop_status"]
 
-@app.put("/api/merchants/{merchant_id}/shop-status")
-async def update_shop_status(merchant_id: str, status_data: Dict[str, Any]):
-    """Update shop status"""
-    logger.info(f"🔥 Update shop status for merchant: {merchant_id}")
+@app.get("/products")
+async def get_products(merchant_id: str = Depends(get_current_merchant), category: Optional[str] = None):
+    """Get merchant's products with optional category filter"""
+    logger.info(f"Fetching products for merchant_id: {merchant_id}, category: {category}")
     
-    if merchant_id not in MERCHANTS_DB:
-        raise HTTPException(status_code=404, detail="Merchant not found")
+    merchant_products = [p for p in memory_store.products.values() if p["merchant_id"] == merchant_id]
     
-    MERCHANTS_DB[merchant_id]["shop_status"].update(status_data)
-    return JSONResponse(content=MERCHANTS_DB[merchant_id]["shop_status"])
-
-# ============ ITEMS/PRODUCTS ROUTES ============
-@app.get("/api/merchants/{merchant_id}/items")
-async def get_items(
-    merchant_id: str,
-    category: Optional[str] = None,
-    status: Optional[str] = None,
-    search: Optional[str] = None
-):
-    """Get merchant items with filters - REAL IMPLEMENTATION"""
-    logger.info(f"🔥 Items request for merchant: {merchant_id}, filters: category={category}, status={status}, search={search}")
-    
-    if merchant_id not in ITEMS_DB:
-        logger.info(f"🔥 No items found for merchant: {merchant_id}, returning empty list")
-        return JSONResponse(content=[])
-    
-    items = ITEMS_DB[merchant_id].copy()
-    
-    # Apply filters
     if category:
-        items = [item for item in items if item["category"].lower() == category.lower()]
-        logger.info(f"🔥 After category filter: {len(items)} items")
+        merchant_products = [p for p in merchant_products if p["category"] == category]
+        logger.info(f"Filtered products by category: {category}, count: {len(merchant_products)}")
     
-    if status:
-        items = [item for item in items if item["status"].lower() == status.lower()]
-        logger.info(f"🔥 After status filter: {len(items)} items")
-    
-    if search:
-        search_lower = search.lower()
-        items = [item for item in items if 
-                search_lower in item["name"].lower() or 
-                search_lower in item["description"].lower()]
-        logger.info(f"🔥 After search filter: {len(items)} items")
-    
-    logger.info(f"✅ Returning {len(items)} items")
-    return JSONResponse(content=items)
+    logger.info(f"Total products returned: {len(merchant_products)}")
+    return merchant_products
 
-@app.post("/api/merchants/{merchant_id}/items")
-async def create_item(merchant_id: str, item_data: ItemCreate):
-    """Create new item - REAL IMPLEMENTATION"""
-    logger.info(f"🔥 Create item for merchant: {merchant_id}, item: {item_data.name}")
+@app.post("/products")
+async def create_product(product_data: ProductCreate, merchant_id: str = Depends(get_current_merchant)):
+    """Create a new product"""
+    product_id = f"prod_{uuid.uuid4().hex[:8]}"
     
-    if merchant_id not in ITEMS_DB:
-        ITEMS_DB[merchant_id] = []
-    
-    # Generate new item ID
-    new_id = f"item_{len(ITEMS_DB[merchant_id]) + 1:03d}"
-    
-    new_item = {
-        "item_id": new_id,
-        "name": item_data.name,
-        "category": item_data.category,
-        "subcategory": item_data.subcategory,
-        "brand": item_data.brand,
-        "description": item_data.description,
-        "price": item_data.price,
-        "mrp": item_data.mrp,
-        "stock_quantity": item_data.stock_quantity,
-        "status": "active",
-        "weight": item_data.weight,
-        "sku": f"{item_data.category[:2].upper()}{new_id[-3:]}",
-        "images": [],
-        "created_at": datetime.now().isoformat()
+    new_product = {
+        "product_id": product_id,
+        "merchant_id": merchant_id,
+        **product_data.dict(),
+        "is_active": True,
+        "created_at": datetime.now().isoformat(),
+        "offers": []
     }
     
-    ITEMS_DB[merchant_id].append(new_item)
-    logger.info(f"✅ Item created: {new_item['item_id']}")
-    return JSONResponse(content=new_item)
+    memory_store.products[product_id] = new_product
+    return new_product
 
-@app.put("/api/merchants/{merchant_id}/items/{item_id}")
-async def update_item(merchant_id: str, item_id: str, item_data: ItemUpdate):
-    """Update item - REAL IMPLEMENTATION"""
-    logger.info(f"🔥 Update item: {item_id} for merchant: {merchant_id}")
-    
-    if merchant_id not in ITEMS_DB:
-        raise HTTPException(status_code=404, detail="Merchant not found")
-    
-    items = ITEMS_DB[merchant_id]
-    item_index = next((i for i, item in enumerate(items) if item["item_id"] == item_id), None)
-    
-    if item_index is None:
-        raise HTTPException(status_code=404, detail="Item not found")
-    
-    # Update only provided fields
-    update_data = item_data.dict(exclude_unset=True)
-    ITEMS_DB[merchant_id][item_index].update(update_data)
-    
-    logger.info(f"✅ Item updated: {item_id}")
-    return JSONResponse(content=ITEMS_DB[merchant_id][item_index])
+@app.get("/products/{product_id}")
+async def get_product(product_id: str, merchant_id: str = Depends(get_current_merchant)):
+    """Get specific product details"""
+    product = memory_store.products.get(product_id)
+    if not product or product["merchant_id"] != merchant_id:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return product
 
-@app.delete("/api/merchants/{merchant_id}/items/{item_id}")
-async def delete_item(merchant_id: str, item_id: str):
-    """Delete item - REAL IMPLEMENTATION"""
-    logger.info(f"🔥 Delete item: {item_id} for merchant: {merchant_id}")
+@app.put("/products/{product_id}")
+async def update_product(product_id: str, product_data: Dict[str, Any], merchant_id: str = Depends(get_current_merchant)):
+    """Update product information"""
+    if product_id not in memory_store.products:
+        raise HTTPException(status_code=404, detail="Product not found")
     
-    if merchant_id not in ITEMS_DB:
-        raise HTTPException(status_code=404, detail="Merchant not found")
+    product = memory_store.products[product_id]
+    if product["merchant_id"] != merchant_id:
+        raise HTTPException(status_code=403, detail="Not authorized to update this product")
     
-    items = ITEMS_DB[merchant_id]
-    item_index = next((i for i, item in enumerate(items) if item["item_id"] == item_id), None)
+    memory_store.products[product_id].update(product_data)
+    memory_store.products[product_id]["updated_at"] = datetime.now().isoformat()
     
-    if item_index is None:
-        raise HTTPException(status_code=404, detail="Item not found")
-    
-    deleted_item = ITEMS_DB[merchant_id].pop(item_index)
-    logger.info(f"✅ Item deleted: {item_id}")
-    return JSONResponse(content={"message": "Item deleted successfully", "deleted_item": deleted_item})
+    return memory_store.products[product_id]
 
-# ============ ORDERS ROUTES ============
-@app.get("/api/merchants/{merchant_id}/orders")
-async def get_orders(
-    merchant_id: str,
-    status: Optional[str] = None,
-    date: Optional[str] = None
-):
-    """Get merchant orders - REAL IMPLEMENTATION"""
-    logger.info(f"🔥 Orders request for merchant: {merchant_id}, filters: status={status}, date={date}")
+@app.delete("/products/{product_id}")
+async def delete_product(product_id: str, merchant_id: str = Depends(get_current_merchant)):
+    """Delete a product"""
+    if product_id not in memory_store.products:
+        raise HTTPException(status_code=404, detail="Product not found")
     
-    if merchant_id not in ORDERS_DB:
-        logger.info(f"🔥 No orders found for merchant: {merchant_id}, returning empty list")
-        return JSONResponse(content=[])
+    product = memory_store.products[product_id]
+    if product["merchant_id"] != merchant_id:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this product")
     
-    orders = ORDERS_DB[merchant_id].copy()
+    del memory_store.products[product_id]
+    return {"message": "Product deleted successfully"}
+
+@app.get("/orders")
+async def get_orders(merchant_id: str = Depends(get_current_merchant), status: Optional[str] = None):
+    """Get merchant's orders with optional status filter"""
+    merchant_orders = [o for o in memory_store.orders.values() if o["merchant_id"] == merchant_id]
     
-    # Apply filters
     if status:
-        orders = [order for order in orders if order["status"].lower() == status.lower()]
-        logger.info(f"🔥 After status filter: {len(orders)} orders")
+        merchant_orders = [o for o in merchant_orders if o["status"] == status]
     
-    if date:
-        orders = [order for order in orders if order["order_time"].startswith(date)]
-        logger.info(f"🔥 After date filter: {len(orders)} orders")
-    
-    logger.info(f"✅ Returning {len(orders)} orders")
-    return JSONResponse(content=orders)
+    # Sort by creation date (newest first)
+    merchant_orders.sort(key=lambda x: x["created_at"], reverse=True)
+    return merchant_orders
 
-@app.post("/api/merchants/{merchant_id}/orders/{order_id}/accept")
-async def accept_order(merchant_id: str, order_id: str, acceptance_data: Dict[str, Any] = {}):
-    """Accept order - REAL IMPLEMENTATION"""
-    logger.info(f"🔥 Accept order: {order_id} for merchant: {merchant_id}")
-    
-    if merchant_id not in ORDERS_DB:
-        raise HTTPException(status_code=404, detail="Merchant not found")
-    
-    orders = ORDERS_DB[merchant_id]
-    order_index = next((i for i, order in enumerate(orders) if order["order_id"] == order_id), None)
-    
-    if order_index is None:
+@app.put("/orders/{order_id}/status")
+async def update_order_status(order_id: str, status_data: OrderStatusUpdate, merchant_id: str = Depends(get_current_merchant)):
+    """Update order status"""
+    if order_id not in memory_store.orders:
         raise HTTPException(status_code=404, detail="Order not found")
     
-    ORDERS_DB[merchant_id][order_index]["status"] = "accepted"
-    if "estimated_delivery" in acceptance_data:
-        ORDERS_DB[merchant_id][order_index]["estimated_delivery"] = acceptance_data["estimated_delivery"]
+    order = memory_store.orders[order_id]
+    if order["merchant_id"] != merchant_id:
+        raise HTTPException(status_code=403, detail="Not authorized to update this order")
     
-    logger.info(f"✅ Order accepted: {order_id}")
-    return JSONResponse(content=ORDERS_DB[merchant_id][order_index])
+    memory_store.orders[order_id]["status"] = status_data.status
+    memory_store.orders[order_id]["updated_at"] = datetime.now().isoformat()
+    
+    return memory_store.orders[order_id]
 
-@app.post("/api/merchants/{merchant_id}/orders/{order_id}/decline")
-async def decline_order(merchant_id: str, order_id: str, decline_data: Dict[str, Any] = {}):
-    """Decline order - REAL IMPLEMENTATION"""
-    logger.info(f"🔥 Decline order: {order_id} for merchant: {merchant_id}")
-    
-    if merchant_id not in ORDERS_DB:
-        raise HTTPException(status_code=404, detail="Merchant not found")
-    
-    orders = ORDERS_DB[merchant_id]
-    order_index = next((i for i, order in enumerate(orders) if order["order_id"] == order_id), None)
-    
-    if order_index is None:
-        raise HTTPException(status_code=404, detail="Order not found")
-    
-    ORDERS_DB[merchant_id][order_index]["status"] = "declined"
-    if "reason" in decline_data:
-        ORDERS_DB[merchant_id][order_index]["decline_reason"] = decline_data["reason"]
-    
-    logger.info(f"✅ Order declined: {order_id}")
-    return JSONResponse(content=ORDERS_DB[merchant_id][order_index])
+@app.get("/offers")
+async def get_offers(merchant_id: str = Depends(get_current_merchant)):
+    """Get merchant's offers"""
+    merchant_offers = [o for o in memory_store.offers.values() if o["merchant_id"] == merchant_id]
+    return merchant_offers
 
-@app.put("/api/merchants/{merchant_id}/orders/{order_id}/status")
-async def update_order_status(merchant_id: str, order_id: str, status_update: OrderStatusUpdate):
-    """Update order status - REAL IMPLEMENTATION"""
-    logger.info(f"🔥 Update order status: {order_id} to {status_update.status}")
-    
-    if merchant_id not in ORDERS_DB:
-        raise HTTPException(status_code=404, detail="Merchant not found")
-    
-    orders = ORDERS_DB[merchant_id]
-    order_index = next((i for i, order in enumerate(orders) if order["order_id"] == order_id), None)
-    
-    if order_index is None:
-        raise HTTPException(status_code=404, detail="Order not found")
-    
-    ORDERS_DB[merchant_id][order_index]["status"] = status_update.status
-    if status_update.estimated_delivery:
-        ORDERS_DB[merchant_id][order_index]["estimated_delivery"] = status_update.estimated_delivery
-    
-    logger.info(f"✅ Order status updated: {order_id}")
-    return JSONResponse(content=ORDERS_DB[merchant_id][order_index])
-
-# ============ OFFERS ROUTES ============
-@app.get("/api/merchants/{merchant_id}/offers")
-async def get_offers(merchant_id: str):
-    """Get merchant offers - REAL IMPLEMENTATION"""
-    logger.info(f"🔥 Offers request for merchant: {merchant_id}")
-    
-    if merchant_id not in OFFERS_DB:
-        logger.info(f"🔥 No offers found for merchant: {merchant_id}, returning empty list")
-        return JSONResponse(content=[])
-    
-    offers = OFFERS_DB[merchant_id]
-    logger.info(f"✅ Returning {len(offers)} offers")
-    return JSONResponse(content=offers)
-
-@app.post("/api/merchants/{merchant_id}/offers")
-async def create_offer(merchant_id: str, offer_data: OfferCreate):
-    """Create new offer - REAL IMPLEMENTATION"""
-    logger.info(f"🔥 Create offer for merchant: {merchant_id}, offer: {offer_data.title}")
-    
-    if merchant_id not in OFFERS_DB:
-        OFFERS_DB[merchant_id] = []
-    
-    new_id = f"offer_{len(OFFERS_DB[merchant_id]) + 1:03d}"
-    
+@app.post("/offers")
+async def create_offer(offer_data: OfferCreate, merchant_id: str = Depends(get_current_merchant)):
+    """Create a new offer (supports product-level offers)"""
+    offer_id = f"off_{uuid.uuid4().hex[:8]}"
     new_offer = {
-        "offer_id": new_id,
-        "title": offer_data.title,
-        "description": offer_data.description,
-        "discount_type": offer_data.discount_type,
-        "discount_value": offer_data.discount_value,
-        "min_order_value": offer_data.min_order_value,
-        "max_discount": offer_data.max_discount,
-        "applicable_categories": offer_data.applicable_categories,
-        "status": "active",
+        "offer_id": offer_id,
+        "merchant_id": merchant_id,
+        **offer_data.dict(),
+        "is_active": True,
+        "usage_count": 0,
         "created_at": datetime.now().isoformat()
     }
-    
-    OFFERS_DB[merchant_id].append(new_offer)
-    logger.info(f"✅ Offer created: {new_offer['offer_id']}")
-    return JSONResponse(content=new_offer)
+    memory_store.offers[offer_id] = new_offer
+    # Attach offer to products if product_ids specified
+    for pid in offer_data.product_ids:
+        if pid in memory_store.products:
+            memory_store.products[pid].setdefault("offers", []).append(offer_id)
+    return new_offer
 
-@app.delete("/api/merchants/{merchant_id}/offers/{offer_id}")
-async def delete_offer(merchant_id: str, offer_id: str):
-    """Delete offer - REAL IMPLEMENTATION"""
-    logger.info(f"🔥 Delete offer: {offer_id} for merchant: {merchant_id}")
-    
-    if merchant_id not in OFFERS_DB:
-        raise HTTPException(status_code=404, detail="Merchant not found")
-    
-    offers = OFFERS_DB[merchant_id]
-    offer_index = next((i for i, offer in enumerate(offers) if offer["offer_id"] == offer_id), None)
-    
-    if offer_index is None:
+@app.put("/offers/{offer_id}")
+async def update_offer(offer_id: str, offer_data: Dict[str, Any], merchant_id: str = Depends(get_current_merchant)):
+    """Update offer information"""
+    if offer_id not in memory_store.offers:
         raise HTTPException(status_code=404, detail="Offer not found")
     
-    deleted_offer = OFFERS_DB[merchant_id].pop(offer_index)
-    logger.info(f"✅ Offer deleted: {offer_id}")
-    return JSONResponse(content={"message": "Offer deleted successfully", "deleted_offer": deleted_offer})
+    offer = memory_store.offers[offer_id]
+    if offer["merchant_id"] != merchant_id:
+        raise HTTPException(status_code=403, detail="Not authorized to update this offer")
+    
+    memory_store.offers[offer_id].update(offer_data)
+    memory_store.offers[offer_id]["updated_at"] = datetime.now().isoformat()
+    
+    return memory_store.offers[offer_id]
 
-@app.post("/api/merchants/{merchant_id}/apply-overall-discount")
-async def apply_global_discount(merchant_id: str, discount_data: Dict[str, Any]):
-    """Apply global discount - REAL IMPLEMENTATION"""
-    logger.info(f"🔥 Apply global discount for merchant: {merchant_id}")
-    # Implementation for applying discount to all products
-    return JSONResponse(content={"message": "Global discount applied", "discount_data": discount_data})
+@app.delete("/offers/{offer_id}")
+async def delete_offer(offer_id: str, merchant_id: str = Depends(get_current_merchant)):
+    """Delete an offer"""
+    if offer_id not in memory_store.offers:
+        raise HTTPException(status_code=404, detail="Offer not found")
+    
+    offer = memory_store.offers[offer_id]
+    if offer["merchant_id"] != merchant_id:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this offer")
+    
+    del memory_store.offers[offer_id]
+    return {"message": "Offer deleted successfully"}
 
+# In-memory reviews store
+if not hasattr(memory_store, "reviews"):
+    memory_store.reviews = {}
+
+def get_current_customer(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
+    token = credentials.credentials
+    # For demo, accept any token and return customer123
+    if token and token.startswith(("mock", "demo")):
+        return "customer123"
+    # Real implementation: decode JWT and extract customer_id
+    for session_id, session_data in memory_store.sessions.items():
+        if session_data.get("token") == token:
+            return session_data.get("customer_id", "customer123")
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication credentials")
+
+@app.post("/reviews")
+async def add_review(review: ReviewCreate = Body(...), customer_id: str = Depends(get_current_customer)):
+    """Add a review for a product or shop (customer only)"""
+    review_id = f"rev_{uuid.uuid4().hex[:8]}"
+    review_dict = review.dict()
+    review_dict["review_id"] = review_id
+    review_dict["customer_id"] = customer_id
+    review_dict["created_at"] = datetime.now().isoformat()
+    review_dict["is_verified"] = True
+    review_dict["is_approved"] = True
+    memory_store.reviews[review_id] = review_dict
+    # Update product/shop review stats
+    if review.product_id and review.product_id in memory_store.products:
+        p = memory_store.products[review.product_id]
+        p["total_reviews"] = p.get("total_reviews", 0) + 1
+        p["rating"] = round(((p.get("rating", 0) * (p["total_reviews"] - 1)) + review.rating) / p["total_reviews"], 2)
+    if review.shop_id and review.shop_id in memory_store.merchants:
+        s = memory_store.merchants[review.shop_id]
+        s["total_reviews"] = s.get("total_reviews", 0) + 1
+        s["rating"] = round(((s.get("rating", 0) * (s["total_reviews"] - 1)) + review.rating) / s["total_reviews"], 2)
+    return review_dict
+
+@app.get("/reviews")
+async def get_reviews(product_id: Optional[str] = None, shop_id: Optional[str] = None):
+    """List reviews for a product or shop"""
+    reviews = list(memory_store.reviews.values())
+    if product_id:
+        reviews = [r for r in reviews if r.get("product_id") == product_id]
+    if shop_id:
+        reviews = [r for r in reviews if r.get("shop_id") == shop_id]
+    return reviews
+
+# Run the application
 if __name__ == "__main__":
+    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8001, reload=True)
