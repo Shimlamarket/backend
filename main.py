@@ -3,7 +3,7 @@ FastAPI Backend for Market Merchant App
 Main application entry point with all routes and middleware
 """
 
-from fastapi import FastAPI, HTTPException, Depends, status, Body, Path
+from fastapi import FastAPI, HTTPException, Depends, status, Body, Path, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import List, Dict, Optional, Any
@@ -719,6 +719,43 @@ async def delete_shop_offer(shop_id: str, offer_id: str):
         raise HTTPException(status_code=404, detail="Offer not found")
     del memory_store.offers[offer_id]
     return {"message": "Offer deleted"}
+
+@app.post("/orders")
+async def create_order(order: Dict[str, Any]):
+    shop_id = order.get("shop_id")
+    merchant = None
+    # Find merchant by shop_id
+    for m in memory_store.merchants.values():
+        if m.get("merchant_id") == shop_id or m.get("shop_id") == shop_id:
+            merchant = m
+            break
+    if not merchant:
+        raise HTTPException(status_code=404, detail="Shop not found")
+    if not merchant.get("shop_status", {}).get("is_open", True):
+        raise HTTPException(status_code=400, detail="Shop is currently closed and cannot accept orders.")
+    order_id = f"ORD_{uuid.uuid4().hex[:8]}"
+    new_order = {"order_id": order_id, **order, "status": "pending", "created_at": datetime.now().isoformat()}
+    memory_store.orders[order_id] = new_order
+    return new_order
+
+@app.put("/shops/{shop_id}/status")
+async def update_shop_open_status(shop_id: str, status: Dict[str, Any]):
+    # Find merchant by shop_id
+    merchant = None
+    for m in memory_store.merchants.values():
+        if m.get("merchant_id") == shop_id or m.get("shop_id") == shop_id:
+            merchant = m
+            break
+    if not merchant:
+        raise HTTPException(status_code=404, detail="Shop not found")
+    if "shop_status" not in merchant:
+        merchant["shop_status"] = {}
+    if "is_open" in status:
+        merchant["shop_status"]["is_open"] = status["is_open"]
+    else:
+        raise HTTPException(status_code=400, detail="Missing 'is_open' in request body.")
+    merchant["shop_status"]["updated_at"] = datetime.now().isoformat()
+    return {"shop_id": shop_id, "is_open": merchant["shop_status"]["is_open"]}
 
 # Run the application
 if __name__ == "__main__":
