@@ -5,33 +5,50 @@ export default {
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
+    fontFamily: {
+      sans: ["Inter", "Nunito", "ui-sans-serif", "system-ui"],
+    },
     extend: {
       colors: {
         primary: {
-          50: '#eff6ff',
-          100: '#dbeafe',
-          200: '#bfdbfe',
-          300: '#93c5fd',
-          400: '#60a5fa',
-          500: '#3b82f6',
-          600: '#2563eb',
-          700: '#1d4ed8',
-          800: '#1e40af',
-          900: '#1e3a8a',
+          50: '#fff5f5',
+          100: '#ffe3e3',
+          200: '#ffbdbd',
+          300: '#ff9b9b',
+          400: '#f86a6a',
+          500: '#ef233c', // Zomato red
+          600: '#d90429',
+          700: '#a50021',
+          800: '#6a040f',
+          900: '#370617',
         },
-        secondary: {
-          50: '#f8fafc',
-          100: '#f1f5f9',
-          200: '#e2e8f0',
-          300: '#cbd5e1',
-          400: '#94a3b8',
-          500: '#64748b',
-          600: '#475569',
-          700: '#334155',
-          800: '#1e293b',
-          900: '#0f172a',
-        }
-      }
+        accent: {
+          100: '#f1f8e9',
+          200: '#b2dfdb',
+          300: '#80cbc4',
+          400: '#4db6ac',
+          500: '#26a69a',
+        },
+        gray: {
+          50: '#f8f9fa',
+          100: '#f1f3f6',
+          200: '#e9ecef',
+          300: '#dee2e6',
+          400: '#ced4da',
+          500: '#adb5bd',
+          600: '#6c757d',
+          700: '#495057',
+          800: '#343a40',
+          900: '#212529',
+        },
+      },
+      boxShadow: {
+        card: '0 2px 16px 0 rgba(239,35,60,0.08)',
+        nav: '0 2px 8px 0 rgba(239,35,60,0.06)',
+      },
+      borderRadius: {
+        xl: '1.25rem',
+      },
     },
   },
   plugins: [],
