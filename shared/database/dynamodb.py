@@ -37,7 +37,7 @@ class DynamoDBService:
             self.dynamodb = boto3.resource('dynamodb', **session_kwargs)
         
         # Table names
-        self.users_table = self.dynamodb.Table('Merchant')
+        self.users_table = self.dynamodb.Table('BaseUser')
         self.shops_table = self.dynamodb.Table('shops')
         self.products_table = self.dynamodb.Table('Product')
         self.orders_table = self.dynamodb.Table('Order')
