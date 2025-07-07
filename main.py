@@ -3,7 +3,7 @@ FastAPI Backend for Market Merchant App
 Main application entry point with all routes and middleware
 """
 
-from fastapi import FastAPI, HTTPException, Depends, status, Body
+from fastapi import FastAPI, HTTPException, Depends, status, Body, Path
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import List, Dict, Optional, Any
@@ -595,6 +595,130 @@ async def get_reviews(product_id: Optional[str] = None, shop_id: Optional[str] =
     if shop_id:
         reviews = [r for r in reviews if r.get("shop_id") == shop_id]
     return reviews
+
+@app.get("/products/{product_id}/reviews")
+async def get_product_reviews(product_id: str):
+    """List reviews for a product"""
+    return [r for r in memory_store.reviews.values() if r.get("product_id") == product_id]
+
+@app.get("/shops/{shop_id}/reviews")
+async def get_shop_reviews(shop_id: str):
+    """List reviews for a shop"""
+    return [r for r in memory_store.reviews.values() if r.get("shop_id") == shop_id]
+
+@app.get("/products/{product_id}/offers")
+async def get_product_offers(product_id: str):
+    """List offers for a product"""
+    return [o for o in memory_store.offers.values() if o.get("level") == "product" and product_id in o.get("product_ids", []) and o.get("is_active")]
+
+@app.get("/shops/{shop_id}/offers")
+async def get_shop_offers(shop_id: str):
+    """List offers for a shop (global shop offers)"""
+    return [o for o in memory_store.offers.values() if o.get("level") == "merchant" and o.get("merchant_id") == shop_id and o.get("is_active")]
+
+@app.post("/products/{product_id}/reviews")
+async def add_product_review(product_id: str, review: ReviewCreate):
+    review_id = f"rev_{uuid.uuid4().hex[:8]}"
+    review_dict = review.dict()
+    review_dict["review_id"] = review_id
+    review_dict["product_id"] = product_id
+    review_dict["created_at"] = datetime.now().isoformat()
+    memory_store.reviews[review_id] = review_dict
+    return review_dict
+
+@app.put("/products/{product_id}/reviews/{review_id}")
+async def update_product_review(product_id: str, review_id: str, review: ReviewCreate):
+    if review_id not in memory_store.reviews:
+        raise HTTPException(status_code=404, detail="Review not found")
+    memory_store.reviews[review_id].update(review.dict())
+    memory_store.reviews[review_id]["updated_at"] = datetime.now().isoformat()
+    return memory_store.reviews[review_id]
+
+@app.delete("/products/{product_id}/reviews/{review_id}")
+async def delete_product_review(product_id: str, review_id: str):
+    if review_id not in memory_store.reviews:
+        raise HTTPException(status_code=404, detail="Review not found")
+    del memory_store.reviews[review_id]
+    return {"message": "Review deleted"}
+
+@app.post("/shops/{shop_id}/reviews")
+async def add_shop_review(shop_id: str, review: ReviewCreate):
+    review_id = f"rev_{uuid.uuid4().hex[:8]}"
+    review_dict = review.dict()
+    review_dict["review_id"] = review_id
+    review_dict["shop_id"] = shop_id
+    review_dict["created_at"] = datetime.now().isoformat()
+    memory_store.reviews[review_id] = review_dict
+    return review_dict
+
+@app.put("/shops/{shop_id}/reviews/{review_id}")
+async def update_shop_review(shop_id: str, review_id: str, review: ReviewCreate):
+    if review_id not in memory_store.reviews:
+        raise HTTPException(status_code=404, detail="Review not found")
+    memory_store.reviews[review_id].update(review.dict())
+    memory_store.reviews[review_id]["updated_at"] = datetime.now().isoformat()
+    return memory_store.reviews[review_id]
+
+@app.delete("/shops/{shop_id}/reviews/{review_id}")
+async def delete_shop_review(shop_id: str, review_id: str):
+    if review_id not in memory_store.reviews:
+        raise HTTPException(status_code=404, detail="Review not found")
+    del memory_store.reviews[review_id]
+    return {"message": "Review deleted"}
+
+@app.post("/products/{product_id}/offers")
+async def add_product_offer(product_id: str, offer: OfferCreate):
+    offer_id = f"off_{uuid.uuid4().hex[:8]}"
+    offer_dict = offer.dict()
+    offer_dict["offer_id"] = offer_id
+    offer_dict["level"] = "product"
+    offer_dict["product_ids"] = [product_id]
+    offer_dict["is_active"] = True
+    offer_dict["created_at"] = datetime.now().isoformat()
+    memory_store.offers[offer_id] = offer_dict
+    return offer_dict
+
+@app.put("/products/{product_id}/offers/{offer_id}")
+async def update_product_offer(product_id: str, offer_id: str, offer: OfferCreate):
+    if offer_id not in memory_store.offers:
+        raise HTTPException(status_code=404, detail="Offer not found")
+    memory_store.offers[offer_id].update(offer.dict())
+    memory_store.offers[offer_id]["updated_at"] = datetime.now().isoformat()
+    return memory_store.offers[offer_id]
+
+@app.delete("/products/{product_id}/offers/{offer_id}")
+async def delete_product_offer(product_id: str, offer_id: str):
+    if offer_id not in memory_store.offers:
+        raise HTTPException(status_code=404, detail="Offer not found")
+    del memory_store.offers[offer_id]
+    return {"message": "Offer deleted"}
+
+@app.post("/shops/{shop_id}/offers")
+async def add_shop_offer(shop_id: str, offer: OfferCreate):
+    offer_id = f"off_{uuid.uuid4().hex[:8]}"
+    offer_dict = offer.dict()
+    offer_dict["offer_id"] = offer_id
+    offer_dict["level"] = "merchant"
+    offer_dict["merchant_id"] = shop_id
+    offer_dict["is_active"] = True
+    offer_dict["created_at"] = datetime.now().isoformat()
+    memory_store.offers[offer_id] = offer_dict
+    return offer_dict
+
+@app.put("/shops/{shop_id}/offers/{offer_id}")
+async def update_shop_offer(shop_id: str, offer_id: str, offer: OfferCreate):
+    if offer_id not in memory_store.offers:
+        raise HTTPException(status_code=404, detail="Offer not found")
+    memory_store.offers[offer_id].update(offer.dict())
+    memory_store.offers[offer_id]["updated_at"] = datetime.now().isoformat()
+    return memory_store.offers[offer_id]
+
+@app.delete("/shops/{shop_id}/offers/{offer_id}")
+async def delete_shop_offer(shop_id: str, offer_id: str):
+    if offer_id not in memory_store.offers:
+        raise HTTPException(status_code=404, detail="Offer not found")
+    del memory_store.offers[offer_id]
+    return {"message": "Offer deleted"}
 
 # Run the application
 if __name__ == "__main__":
