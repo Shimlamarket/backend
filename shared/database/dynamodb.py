@@ -12,17 +12,29 @@ from shared.models.base import BaseUser, Shop, Product, Order, Review, Address
 
 class DynamoDBService:
     def __init__(self):
-        # Use local DynamoDB for development
-        if os.getenv("ENVIRONMENT") == "development":
+        # Read config from environment
+        region = os.getenv("AWS_REGION", "us-east-1")
+        aws_access_key_id = os.getenv("AWS_ACCESS_KEY_ID")
+        aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+        endpoint_url = os.getenv("DYNAMODB_ENDPOINT_URL")
+        env = os.getenv("ENVIRONMENT", "production")
+
+        # Use endpoint_url only for local development
+        if env == "development" and endpoint_url:
             self.dynamodb = boto3.resource(
                 'dynamodb',
-                endpoint_url='http://localhost:8000',
-                region_name='us-east-1',
-                aws_access_key_id='dummy',
-                aws_secret_access_key='dummy'
+                endpoint_url=endpoint_url,
+                region_name=region,
+                aws_access_key_id=aws_access_key_id,
+                aws_secret_access_key=aws_secret_access_key
             )
         else:
-            self.dynamodb = boto3.resource('dynamodb')
+            # For AWS, use region and credentials if provided, else use default provider chain
+            session_kwargs = {"region_name": region}
+            if aws_access_key_id and aws_secret_access_key:
+                session_kwargs["aws_access_key_id"] = aws_access_key_id
+                session_kwargs["aws_secret_access_key"] = aws_secret_access_key
+            self.dynamodb = boto3.resource('dynamodb', **session_kwargs)
         
         # Table names
         self.users_table = self.dynamodb.Table('users')
