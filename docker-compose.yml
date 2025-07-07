@@ -1,0 +1,97 @@
+version: '3.8'
+
+services:
+  # DynamoDB Local
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    container_name: dynamodb-local
+    ports:
+      - "8000:8000"
+    command: "-jar DynamoDBLocal.jar -sharedDb -dbPath ./data"
+    volumes:
+      - dynamodb_data:/home/dynamodblocal/data
+    networks:
+      - shop-network
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api_gateway/Dockerfile
+    container_name: api-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=development
+      - DYNAMODB_ENDPOINT_URL=http://dynamodb-local:8000
+    depends_on:
+      - dynamodb-local
+    networks:
+      - shop-network
+    volumes:
+      - ./api_gateway:/app/api_gateway
+      - ./shared:/app/shared
+
+  # Customer API
+  customer-api:
+    build:
+      context: .
+      dockerfile: customer_api/Dockerfile
+    container_name: customer-api
+    ports:
+      - "8001:8001"
+    environment:
+      - ENVIRONMENT=development
+      - DYNAMODB_ENDPOINT_URL=http://dynamodb-local:8000
+    depends_on:
+      - dynamodb-local
+    networks:
+      - shop-network
+    volumes:
+      - ./customer_api:/app/customer_api
+      - ./shared:/app/shared
+
+  # Merchant API
+  merchant-api:
+    build:
+      context: .
+      dockerfile: merchant_api/Dockerfile
+    container_name: merchant-api
+    ports:
+      - "8002:8002"
+    environment:
+      - ENVIRONMENT=development
+      - DYNAMODB_ENDPOINT_URL=http://dynamodb-local:8000
+    depends_on:
+      - dynamodb-local
+    networks:
+      - shop-network
+    volumes:
+      - ./merchant_api:/app/merchant_api
+      - ./shared:/app/shared
+
+  # Admin API
+  admin-api:
+    build:
+      context: .
+      dockerfile: admin_api/Dockerfile
+    container_name: admin-api
+    ports:
+      - "8003:8003"
+    environment:
+      - ENVIRONMENT=development
+      - DYNAMODB_ENDPOINT_URL=http://dynamodb-local:8000
+    depends_on:
+      - dynamodb-local
+    networks:
+      - shop-network
+    volumes:
+      - ./admin_api:/app/admin_api
+      - ./shared:/app/shared
+
+volumes:
+  dynamodb_data:
+
+networks:
+  shop-network:
+    driver: bridge 
