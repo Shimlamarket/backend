@@ -20,7 +20,8 @@ class DynamoDBService:
         env = os.getenv("ENVIRONMENT", "production")
 
         # Use endpoint_url only for local development
-        if env == "development" and endpoint_url:
+        # if env == "development" and endpoint_url:
+        if False:
             self.dynamodb = boto3.resource(
                 'dynamodb',
                 endpoint_url=endpoint_url,
@@ -31,13 +32,15 @@ class DynamoDBService:
         else:
             # For AWS, use region and credentials if provided, else use default provider chain
             session_kwargs = {"region_name": region}
-            if aws_access_key_id and aws_secret_access_key:
-                session_kwargs["aws_access_key_id"] = aws_access_key_id
-                session_kwargs["aws_secret_access_key"] = aws_secret_access_key
+            # if aws_access_key_id and aws_secret_access_key:
+            session_kwargs["aws_access_key_id"] = "AKIATO7REBOZP2QOLUMX"
+            session_kwargs["aws_secret_access_key"] = "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"
+            print(session_kwargs)
             self.dynamodb = boto3.resource('dynamodb', **session_kwargs)
         
         # Table names
         self.users_table = self.dynamodb.Table('BaseUser')
+        print(self.users_table)
         self.shops_table = self.dynamodb.Table('Shop')
         self.products_table = self.dynamodb.Table('Product')
         self.orders_table = self.dynamodb.Table('Order')
@@ -65,12 +68,13 @@ class DynamoDBService:
         """Create a new user"""
         user_data = user.dict()
         user_data = {k: self._serialize_datetime(v) for k, v in user_data.items()}
-        
+        print(user_data)
         self.users_table.put_item(Item=user_data)
         return user_data
     
     async def get_user(self, user_id: str) -> Optional[Dict]:
         """Get user by ID"""
+        print(user_id)
         response = self.users_table.get_item(Key={'user_id': user_id})
         print(response)
         if 'Item' in response:
@@ -121,9 +125,13 @@ class DynamoDBService:
     
     async def get_shops_by_merchant(self, merchant_id: str) -> List[Dict]:
         """Get all shops for a merchant"""
-        response = self.shops_table.query(
-            IndexName='merchant_id-index',
-            KeyConditionExpression=Key('merchant_id').eq(merchant_id)
+        # response = self.shops_table.query(
+        #     IndexName='merchant_id-index',
+        #     KeyConditionExpression=Key('merchant_id').eq(merchant_id)
+        # )
+
+        response = self.shops_table.scan(
+            FilterExpression=Attr('merchant_id').eq('merchant_id')
         )
         
         shops = []
@@ -187,9 +195,8 @@ class DynamoDBService:
     
     async def get_products_by_shop(self, shop_id: str) -> List[Dict]:
         """Get all products for a shop"""
-        response = self.products_table.query(
-            IndexName='shop_id-index',
-            KeyConditionExpression=Key('shop_id').eq(shop_id)
+        response = self.products_table.scan(
+            FilterExpression=Attr('shop_id').eq(shop_id)
         )
         
         products = []
@@ -216,9 +223,8 @@ class DynamoDBService:
     
     async def get_orders_by_customer(self, customer_id: str) -> List[Dict]:
         """Get all orders for a customer"""
-        response = self.orders_table.query(
-            IndexName='customer_id-index',
-            KeyConditionExpression=Key('customer_id').eq(customer_id)
+        response = self.orders_table.scan(
+            FilterExpression=Attr('customer_id').eq(customer_id)
         )
         
         orders = []
@@ -230,15 +236,12 @@ class DynamoDBService:
     async def get_orders_by_shop(self, shop_id: str, status: Optional[str] = None) -> List[Dict]:
         """Get all orders for a shop, optionally filtered by status"""
         if status:
-            response = self.orders_table.query(
-                IndexName='shop_id-index',
-                KeyConditionExpression=Key('shop_id').eq(shop_id),
-                FilterExpression=Attr('status').eq(status)
+            response = self.orders_table.scan(
+                FilterExpression=Attr('shop_id').eq(shop_id) & Attr('status').eq(status)
             )
         else:
-            response = self.orders_table.query(
-                IndexName='shop_id-index',
-                KeyConditionExpression=Key('shop_id').eq(shop_id)
+            response = self.orders_table.scan(
+                FilterExpression=Attr('shop_id').eq(shop_id)
             )
         
         orders = []
